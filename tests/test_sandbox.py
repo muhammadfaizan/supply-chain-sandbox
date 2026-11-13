@@ -14,6 +14,7 @@ import unittest
 from pathlib import Path
 
 PROJECT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT / "scripts"))  # lets tests import the screening package
 IMAGE = os.environ.get("SANDBOX_IMAGE", "supply-chain-sandbox:latest")
 SCREEN = PROJECT / "scripts" / "screen.py"
 CLEAN = PROJECT / "fixtures" / "clean-pkg"
@@ -116,12 +117,8 @@ class StaticOnlyTests(unittest.TestCase):
     """Runs without Docker: checks the static stage only."""
 
     def test_detects_all_four_ecosystems(self):
-        sys.path.insert(0, str(SCREEN.parent))
-        try:
-            import screen
-            found = screen.detect_ecosystems(PROJECT / "fixtures" / "multi-ecosystem")
-        finally:
-            sys.path.pop(0)
+        from screening.detect import detect_ecosystems
+        found = detect_ecosystems(PROJECT / "fixtures" / "multi-ecosystem")
         self.assertEqual(sorted(found), ["go", "npm", "pypi", "rubygems"])
 
     def test_static_stage_flags_socket_use_in_malicious_fixture(self):
