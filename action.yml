@@ -1,0 +1,54 @@
+name: "Dependency supply-chain screen"
+description: >
+  Screens a folder's dependencies for known vulnerabilities, malware patterns, and
+  install-time behavior. Fails the job when a dependency is blocked.
+branding:
+  icon: shield
+  color: green
+
+inputs:
+  path:
+    description: "Folder to screen, relative to the repository root."
+    required: false
+    default: "."
+  ecosystem:
+    description: "Only check these ecosystems: pypi, npm, rubygems, go (comma-separated). Empty = detect automatically."
+    required: false
+    default: ""
+  in-docker:
+    description: "Run OSV-Scanner and GuardDog inside Docker even if they are installed. true or false."
+    required: false
+    default: "false"
+  reports-dir:
+    description: "Folder where the screening reports are written."
+    required: false
+    default: "screening-reports"
+
+runs:
+  using: composite
+  steps:
+    - name: Screen dependencies
+      shell: bash
+      env:
+        SCAN_PATH: ${{ inputs.path }}
+        SCAN_ECOSYSTEM: ${{ inputs.ecosystem }}
+        SCAN_IN_DOCKER: ${{ inputs.in-docker }}
+        SCAN_REPORTS: ${{ inputs.reports-dir }}
+      run: |
+        set -euo pipefail
+        args=("$SCAN_PATH" --reports "$SCAN_REPORTS")
+        if [ -n "$SCAN_ECOSYSTEM" ]; then
+          args+=(--ecosystem "$SCAN_ECOSYSTEM")
+        fi
+        if [ "$SCAN_IN_DOCKER" = "true" ]; then
+          args+=(--in-docker)
+        fi
+        python3 "$GITHUB_ACTION_PATH/scripts/sandbox.py" scan "${args[@]}"
+
+    - name: Upload the screening reports
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: dependency-screening-reports
+        path: ${{ inputs.reports-dir }}
+        if-no-files-found: ignore
