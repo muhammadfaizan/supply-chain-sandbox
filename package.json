@@ -1,0 +1,12 @@
+{
+  "name": "supply-chain-sandbox",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Screens dependency updates for supply-chain attacks inside a locked-down sandbox.",
+  "scripts": {
+    "doctor": "python3 scripts/sandbox.py doctor",
+    "build": "python3 scripts/sandbox.py build",
+    "test": "python3 scripts/sandbox.py test",
+    "scan": "python3 scripts/sandbox.py scan"
+  }
+}
