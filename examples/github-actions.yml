@@ -1,10 +1,10 @@
-# Dependency screening as a GitHub Actions step.
+# Screen a project's dependencies on every pull request and push.
 #
 # Copy this file to .github/workflows/ in the project you want to protect.
-# Set `app` below to the folder that holds your dependency files.
+# Change `path` if your dependency files are not at the repository root.
 #
-# The job fails when a dependency is blocked (scan exit code 1). Warnings do not
-# fail the job; they appear in the saved report.
+# The job fails when a dependency is blocked. Warnings do not fail the job;
+# they are listed in the report artifact.
 name: Dependency screening
 
 on:
@@ -14,28 +14,11 @@ on:
 
 jobs:
   screen:
-    runs-on: ubuntu-latest      # needs Docker; GitHub's Ubuntu runners include it
+    runs-on: ubuntu-latest   # Docker is included on GitHub's Ubuntu runners
     steps:
-      - name: Check out your project
-        uses: actions/checkout@v4
-        with:
-          path: app
-
-      - name: Check out the screening tool
-        uses: actions/checkout@v4
-        with:
-          repository: muhammadfaizan/supply-chain-sandbox
-          # Pin to a tag or commit SHA so a future change can't alter your checks.
-          ref: main
-          path: sandbox
+      - uses: actions/checkout@v4
 
       - name: Screen dependencies
-        working-directory: sandbox
-        run: npm run scan -- ../app
-
-      - name: Save the screening report
-        if: always()            # keep the report even when the scan blocks
-        uses: actions/upload-artifact@v4
+        uses: muhammadfaizan/supply-chain-sandbox@main   # pin to a tag or commit SHA in production
         with:
-          name: screening-report
-          path: sandbox/reports/
+          path: "."
