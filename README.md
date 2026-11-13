@@ -26,12 +26,13 @@ The only hard requirement is **Docker**. Every scanner the tool uses runs inside
 4. [Commands](#commands)
 5. [Supported ecosystems](#supported-ecosystems)
 6. [Scan your own project](#scan-your-own-project)
-7. [Reading a report](#reading-a-report)
-8. [What the scanner checks](#what-the-scanner-checks)
-9. [How the isolation works](#how-the-isolation-works)
-10. [Project layout](#project-layout)
-11. [Troubleshooting](#troubleshooting)
-12. [Limitations](#limitations)
+7. [Use in CI/CD](#use-in-cicd)
+8. [Reading a report](#reading-a-report)
+9. [What the scanner checks](#what-the-scanner-checks)
+10. [How the isolation works](#how-the-isolation-works)
+11. [Project layout](#project-layout)
+12. [Troubleshooting](#troubleshooting)
+13. [Limitations](#limitations)
 
 ---
 
@@ -175,6 +176,37 @@ Useful options:
 | `0` | Every folder passed or only got warnings. |
 | `1` | At least one folder was blocked, or a scan failed. |
 | `2` | Usage error, such as a folder that doesn't exist or has no dependency files. |
+
+## Use in CI/CD
+
+You can run the scanner as one step in any pipeline, before dependencies are installed or merged. The step needs three things:
+
+1. **Docker** on the runner. GitHub's Ubuntu runners include it. On other CI systems, use a runner or image that can run Docker.
+2. **The scanner.** Clone this repository in the job, and pin it to a tag or commit so your checks can't change without you noticing.
+3. **Your project folder.** Pass its path to the scanner.
+
+The step is one command:
+
+```bash
+npm run scan -- path/to/your-project
+```
+
+Without Node.js, the same thing is `make scan TARGET=path/to/your-project`, or `python3 scripts/sandbox.py scan path/to/your-project` directly.
+
+**How the job result works:**
+
+| Scan result | Exit code | Job |
+|---|---|---|
+| PASS | `0` | Continues |
+| WARN | `0` | Continues. Warnings are in the saved report. |
+| BLOCK | `1` | Fails. Stop the merge or deployment. |
+| Scan error (bad path, no dependency files, scanner failure) | `1` or `2` | Fails |
+
+**Keep the report.** Save the `reports/` folder as a build artifact, and run the save step even when the scan fails, so you can see why it blocked.
+
+**Speed.** The first run in a fresh job builds two Docker images, which takes a few minutes. Reuse them by enabling Docker layer caching on your CI system, or by running the tool on a self-hosted runner that keeps its images.
+
+A complete GitHub Actions workflow is in [`examples/github-actions.yml`](examples/github-actions.yml). Copy it into `.github/workflows/` in your project and set the folder path if yours is different.
 
 ## Reading a report
 
