@@ -14,7 +14,7 @@ cd supply-chain-sandbox
 npm run scan
 ```
 
-The only hard requirement is **Docker**. Every scanner the tool uses runs inside Docker if it isn't installed on your machine.
+The only requirement is **Docker**. Every scanner runs inside Docker by default, so nothing has to be installed on your machine.
 
 ---
 
@@ -72,7 +72,7 @@ Nothing is merged or installed into your real project automatically. You read th
 | **Docker** | Everything: the scanners and the sandbox run in it | **Yes** |
 | **Node.js** | The `npm run` shortcuts | No. `make` works without it |
 | **Python 3.10+** | Running the command-line tool on your machine | Yes |
-| **OSV-Scanner, GuardDog** installed locally | Speed | No. If missing, they run in Docker |
+| **OSV-Scanner, GuardDog** installed locally | Only with `--local-tools` | No. Not needed by default |
 
 ### macOS
 
@@ -111,7 +111,7 @@ Run these from the `supply-chain-sandbox` folder.
 | Scan your own folder | `npm run scan -- ../my-project` |
 | Scan several folders | `npm run scan -- ../my-lib ../my-app` |
 | Only check some ecosystems | `npm run scan -- ../my-app --ecosystem npm` |
-| Run the scanners in Docker even if they're installed | `npm run scan -- ../my-app --in-docker` |
+| Use the scanners installed on this machine instead of Docker | `npm run scan -- ../my-app --local-tools` |
 | Run the test suite | `npm run test` |
 
 **Prefer `make`?** The same commands exist as `make doctor`, `make build`, `make test`, `make scan`, and `make scan TARGET=../my-project`.
@@ -167,7 +167,7 @@ Useful options:
 | Option | What it does |
 |---|---|
 | `--ecosystem npm` | Only check npm (or `pypi`, `rubygems`, `go`, or a comma-separated list). |
-| `--in-docker` | Run OSV-Scanner and GuardDog in Docker, even if they're installed locally. |
+| `--local-tools` | Use OSV-Scanner and GuardDog installed on this machine instead of the Docker toolbox. The Docker version is safer, because it keeps untrusted files away from your machine's tools. |
 
 **Exit codes**, for scripts and CI:
 
@@ -196,7 +196,7 @@ That's the whole setup. A complete workflow is in [`examples/github-actions.yml`
 |---|---|---|
 | `path` | `.` | The folder to screen, relative to the repository root. |
 | `ecosystem` | detect automatically | Only check these: `pypi`, `npm`, `rubygems`, `go` (comma-separated). |
-| `in-docker` | `false` | Run OSV-Scanner and GuardDog in Docker, even if they are installed. |
+| `local-tools` | `false` | Use OSV-Scanner and GuardDog installed on the runner instead of the Docker toolbox. |
 | `reports-dir` | `screening-reports` | Where the report files are written. |
 
 **What the step does.** It runs the same screening as `npm run scan`. It writes one report per folder, and uploads them as a build artifact named `dependency-screening-reports`. The upload runs even when the screen blocks, so you can see why.
@@ -314,7 +314,7 @@ The sandbox has several layers. If one fails, the others still protect you.
 | **Honeytoken** | A fake `.env` file inside the sandbox. | Detecting credential theft |
 | **Runtime monitor** | Records network, file, and process activity. | Hiding what happened |
 
-The scanner container (for OSV-Scanner and GuardDog) uses the same read-only, unprivileged, no-capabilities setup. It can reach the internet, because OSV-Scanner needs to download the vulnerability database.
+The scanner container (for OSV-Scanner and GuardDog) uses the same read-only, unprivileged, no-capabilities setup. GuardDog runs with **no network**. OSV-Scanner can reach the internet, because it downloads the vulnerability database. The target folder is mounted read-only in both.
 
 **What Docker alone doesn't cover:** containers share the host's operating system kernel. A specially crafted attack on the kernel could escape a container. Ordinary malicious packages don't do that; they steal credentials and send them over the network, which these layers stop. For code that might attack the kernel, add [gVisor](https://gvisor.dev/) or run each scan in a throwaway virtual machine.
 
@@ -329,13 +329,15 @@ Makefile                     the same commands for make users
 Dockerfile                   sandbox image: non-root user, honeytoken, runtime monitor
 Dockerfile.tools             scanner image: OSV-Scanner and GuardDog, pinned and checksum-verified
 docs/
+  CODE_README.md             what each part of the code does, and how the stages connect
   demo.sh                    script used to record the demo GIF
   demo-scan.gif              the recording at the top of this file
 monitor/
   sitecustomize.py           runtime monitor, loaded in every Python process in the sandbox
 scripts/
   sandbox.py                 command entry point: doctor, build, test, scan
-  screen.py                  screening engine: detection, scanners, sandbox run, verdict, report
+  screen.py                  entry point for the screening engine (thin wrapper)
+  screening/                 the engine, one module per stage (see docs/CODE_README.md)
   run_sandbox.sh             starts the sandbox container with all the isolation flags
   sandbox-install.sh         runs inside the sandbox: copies the package, installs it
 fixtures/
@@ -343,7 +345,8 @@ fixtures/
   malicious-pkg/             simulated attack (expected: BLOCK). Never publish this.
   multi-ecosystem/           one vulnerable dependency file per ecosystem
 tests/
-  test_sandbox.py            tests for isolation, detection, and verdicts
+  test_sandbox.py            end-to-end tests: isolation, detection, verdicts
+  test_screening.py          unit tests for the engine (no Docker needed)
 reports/                     generated reports (not committed)
 ```
 
@@ -386,7 +389,7 @@ The most common causes are Docker not running or the sandbox image not being bui
 These are the honest edges of the current version:
 
 - **Install-time behavior is only checked for Python.** npm, RubyGems, and Go packages get the vulnerability and malware-heuristic checks, but their install code isn't run in the sandbox yet. Their coverage rows say so.
-- **The monitor runs inside the same Python process as the package.** A package that deliberately turns off Python's audit hooks would evade the runtime monitor. The container restrictions still apply in that case.
+- **The monitor runs inside the same Python process as the package.** A package that deliberately turns off Python's audit hooks, or edits the event log file, could hide its own events. Its network attempts still fail, because the container has no network. Moving the monitor outside the package's process is the fix, and it isn't built yet. See [docs/CODE_README.md](docs/CODE_README.md#known-gaps).
 - **Sandbox installs are offline.** Packages are installed from a local folder. Downloads from a package registry would need a proxy that allows only that registry, which isn't built yet.
 - **The sensitive-path list is hand-written.** It covers common credential locations. It is not exhaustive.
 - **Some checks are heuristics.** A legitimate networking library can trigger a WARN. Treat WARN as "look at this", and BLOCK as "don't install this".
