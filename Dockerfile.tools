@@ -1,0 +1,43 @@
+# Scanner toolbox: OSV-Scanner (known vulnerabilities) and GuardDog (malicious-package
+# heuristics) in one image, so nothing has to be installed on the host.
+#
+# Used automatically when a tool is not installed locally, or on purpose with
+# `--in-docker`. The candidate folder is mounted read-only; these tools only read it.
+FROM python:3.13-slim-bookworm
+
+ARG OSV_VERSION=2.7.1
+ARG GUARDDOG_VERSION=3.2.0
+
+# OSV-Scanner: download the release binary and verify its published SHA-256 checksum.
+# The architecture comes from dpkg (amd64 or arm64), so this works with any builder.
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends ca-certificates curl; \
+    rm -rf /var/lib/apt/lists/*; \
+    arch="$(dpkg --print-architecture)"; \
+    base="https://github.com/google/osv-scanner/releases/download/v${OSV_VERSION}"; \
+    curl -fsSL -o /tmp/osv "${base}/osv-scanner_linux_${arch}"; \
+    curl -fsSL -o /tmp/SUMS "${base}/osv-scanner_SHA256SUMS"; \
+    expected="$(grep "osv-scanner_linux_${arch}\$" /tmp/SUMS | cut -d' ' -f1)"; \
+    echo "${expected}  /tmp/osv" | sha256sum -c -; \
+    install -m 0755 /tmp/osv /usr/local/bin/osv-scanner; \
+    rm -f /tmp/osv /tmp/SUMS; \
+    apt-get purge -y curl && apt-get autoremove -y
+
+# GuardDog: pinned PyPI release.
+RUN pip install --no-cache-dir "guarddog==${GUARDDOG_VERSION}"
+
+RUN groupadd --gid 10001 scanner \
+ && useradd --uid 10001 --gid 10001 --create-home --shell /usr/sbin/nologin scanner
+
+# GuardDog keeps a cache of popular package names next to its code and refreshes it
+# (about every 30 days) at startup. Warm the cache now, as root, then let the scanner
+# user write only to that cache folder. Everything else stays root-owned and read-only.
+RUN guarddog --version >/dev/null 2>&1 || true \
+ && GD_RES="$(python -c 'import guarddog,os; print(os.path.join(os.path.dirname(guarddog.__file__),"analyzer","metadata","resources"))')" \
+ && chown -R scanner:scanner "$GD_RES"
+
+USER 10001:10001
+WORKDIR /tmp
+ENV HOME=/tmp
+ENTRYPOINT ["osv-scanner"]
