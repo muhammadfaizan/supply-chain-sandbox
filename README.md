@@ -179,34 +179,44 @@ Useful options:
 
 ## Use in CI/CD
 
-You can run the scanner as one step in any pipeline, before dependencies are installed or merged. The step needs three things:
+The scanner ships as a GitHub Action. Add it as one step in any repository, and it screens that repository's dependencies on every pull request or push.
 
-1. **Docker** on the runner. GitHub's Ubuntu runners include it. On other CI systems, use a runner or image that can run Docker.
-2. **The scanner.** Clone this repository in the job, and pin it to a tag or commit so your checks can't change without you noticing.
-3. **Your project folder.** Pass its path to the scanner.
-
-The step is one command:
-
-```bash
-npm run scan -- path/to/your-project
+```yaml
+- uses: actions/checkout@v4
+- uses: muhammadfaizan/supply-chain-sandbox@main
+  with:
+    path: "."
 ```
 
-Without Node.js, the same thing is `make scan TARGET=path/to/your-project`, or `python3 scripts/sandbox.py scan path/to/your-project` directly.
+That's the whole setup. A complete workflow is in [`examples/github-actions.yml`](examples/github-actions.yml).
+
+**Inputs**
+
+| Input | Default | What it does |
+|---|---|---|
+| `path` | `.` | The folder to screen, relative to the repository root. |
+| `ecosystem` | detect automatically | Only check these: `pypi`, `npm`, `rubygems`, `go` (comma-separated). |
+| `in-docker` | `false` | Run OSV-Scanner and GuardDog in Docker, even if they are installed. |
+| `reports-dir` | `screening-reports` | Where the report files are written. |
+
+**What the step does.** It runs the same screening as `npm run scan`. It writes one report per folder, and uploads them as a build artifact named `dependency-screening-reports`. The upload runs even when the screen blocks, so you can see why.
 
 **How the job result works:**
 
-| Scan result | Exit code | Job |
-|---|---|---|
-| PASS | `0` | Continues |
-| WARN | `0` | Continues. Warnings are in the saved report. |
-| BLOCK | `1` | Fails. Stop the merge or deployment. |
-| Scan error (bad path, no dependency files, scanner failure) | `1` or `2` | Fails |
+| Scan result | Job |
+|---|---|
+| PASS | Passes |
+| WARN | Passes. The warnings are in the report artifact. |
+| BLOCK | Fails. Stop the merge or deployment. |
+| Scan error (bad path, no dependency files, scanner failure) | Fails |
 
-**Keep the report.** Save the `reports/` folder as a build artifact, and run the save step even when the scan fails, so you can see why it blocked.
+**Pin the version.** `@main` always gets the latest version. For production, pin a tag or a commit SHA, such as `@v0.1.0`, so a future change can't alter your checks without your review.
 
-**Speed.** The first run in a fresh job builds two Docker images, which takes a few minutes. Reuse them by enabling Docker layer caching on your CI system, or by running the tool on a self-hosted runner that keeps its images.
+**Requirements.** The runner needs Docker. GitHub's `ubuntu-latest` runners have it. Other CI systems need a runner that can run Docker.
 
-A complete GitHub Actions workflow is in [`examples/github-actions.yml`](examples/github-actions.yml). Copy it into `.github/workflows/` in your project and set the folder path if yours is different.
+**Speed.** The first run on a fresh runner builds two Docker images, which takes a few minutes. Later runs on the same runner reuse them. To keep images between runs, use a self-hosted runner, or enable Docker layer caching on your CI system.
+
+**This repository tests itself the same way.** Its own workflow, [`.github/workflows/ci.yml`](.github/workflows/ci.yml), runs syntax checks, the test suite, the built-in examples, and this action against a fixture.
 
 ## Reading a report
 
@@ -311,6 +321,9 @@ The scanner container (for OSV-Scanner and GuardDog) uses the same read-only, un
 ## Project layout
 
 ```
+action.yml                   GitHub Action: use this repository as a screening step in any project
+.github/workflows/ci.yml     this repository's own CI: syntax checks, tests, self-scan
+examples/github-actions.yml  copy-paste workflow for screening another project
 package.json                 npm commands: doctor, build, test, scan
 Makefile                     the same commands for make users
 Dockerfile                   sandbox image: non-root user, honeytoken, runtime monitor
