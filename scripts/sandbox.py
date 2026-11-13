@@ -174,8 +174,8 @@ def cmd_scan(args) -> int:
         cmd = [sys.executable, str(SCREEN), str(path), "--image", IMAGE, "--report", str(report)]
         if args.ecosystem:
             cmd += ["--ecosystem", args.ecosystem]
-        if args.in_docker:
-            cmd += ["--in-docker"]
+        if args.local_tools:
+            cmd += ["--local-tools"]
 
         print(f"\nScanning {os.path.relpath(path)} ...")
         proc = subprocess.run(cmd, capture_output=True, text=True)
@@ -224,8 +224,9 @@ def main() -> int:
                       help="folders to screen (default: the two built-in examples)")
     scan.add_argument("--ecosystem", default=None,
                       help="only check these: pypi, npm, rubygems, go (comma-separated)")
-    scan.add_argument("--in-docker", action="store_true",
-                      help="run OSV-Scanner and GuardDog in the toolbox container")
+    scan.add_argument("--local-tools", action="store_true",
+                      help="use OSV-Scanner and GuardDog installed on this machine "
+                           "instead of the Docker toolbox")
     scan.add_argument("--reports", default=None,
                       help="folder for the report files (default: reports/ in this tool)")
 

@@ -7,6 +7,9 @@
 # they are listed in the report artifact.
 name: Dependency screening
 
+permissions:
+  contents: read
+
 on:
   pull_request:
   push:

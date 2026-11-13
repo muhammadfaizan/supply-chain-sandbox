@@ -15,8 +15,8 @@ inputs:
     description: "Only check these ecosystems: pypi, npm, rubygems, go (comma-separated). Empty = detect automatically."
     required: false
     default: ""
-  in-docker:
-    description: "Run OSV-Scanner and GuardDog inside Docker even if they are installed. true or false."
+  local-tools:
+    description: "Use OSV-Scanner and GuardDog installed on the runner instead of the Docker toolbox. true or false."
     required: false
     default: "false"
   reports-dir:
@@ -32,18 +32,19 @@ runs:
       env:
         SCAN_PATH: ${{ inputs.path }}
         SCAN_ECOSYSTEM: ${{ inputs.ecosystem }}
-        SCAN_IN_DOCKER: ${{ inputs.in-docker }}
+        SCAN_LOCAL_TOOLS: ${{ inputs.local-tools }}
         SCAN_REPORTS: ${{ inputs.reports-dir }}
       run: |
         set -euo pipefail
-        args=("$SCAN_PATH" --reports "$SCAN_REPORTS")
+        # The folder goes after "--" so a name starting with "-" is never read as an option.
+        args=(--reports "$SCAN_REPORTS")
         if [ -n "$SCAN_ECOSYSTEM" ]; then
           args+=(--ecosystem "$SCAN_ECOSYSTEM")
         fi
-        if [ "$SCAN_IN_DOCKER" = "true" ]; then
-          args+=(--in-docker)
+        if [ "$SCAN_LOCAL_TOOLS" = "true" ]; then
+          args+=(--local-tools)
         fi
-        python3 "$GITHUB_ACTION_PATH/scripts/sandbox.py" scan "${args[@]}"
+        python3 "$GITHUB_ACTION_PATH/scripts/sandbox.py" scan "${args[@]}" -- "$SCAN_PATH"
 
     - name: Upload the screening reports
       if: always()

@@ -1,5 +1,9 @@
 name: CI
 
+# Read-only token: this workflow only checks out and tests the code.
+permissions:
+  contents: read
+
 on:
   push:
   pull_request:
@@ -12,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Compile Python
-        run: python3 -m py_compile scripts/*.py monitor/*.py tests/*.py
+        run: python3 -m py_compile scripts/*.py scripts/screening/*.py monitor/*.py tests/*.py
       - name: Check shell scripts
         run: bash -n scripts/run_sandbox.sh scripts/sandbox-install.sh docs/demo.sh
 
