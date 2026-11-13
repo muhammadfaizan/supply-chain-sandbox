@@ -168,7 +168,8 @@ def cmd_scan(args) -> int:
         if not path.is_dir():
             die(f"not a folder: {target}")
         name = path.name
-        report = REPORTS / f"{name}.md"
+        reports_dir = Path(args.reports).expanduser().resolve() if args.reports else REPORTS
+        report = reports_dir / f"{name}.md"
 
         cmd = [sys.executable, str(SCREEN), str(path), "--image", IMAGE, "--report", str(report)]
         if args.ecosystem:
@@ -225,6 +226,8 @@ def main() -> int:
                       help="only check these: pypi, npm, rubygems, go (comma-separated)")
     scan.add_argument("--in-docker", action="store_true",
                       help="run OSV-Scanner and GuardDog in the toolbox container")
+    scan.add_argument("--reports", default=None,
+                      help="folder for the report files (default: reports/ in this tool)")
 
     args = parser.parse_args()
     handlers = {"doctor": cmd_doctor, "build": cmd_build, "test": cmd_test, "scan": cmd_scan}
