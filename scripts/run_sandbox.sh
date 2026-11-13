@@ -9,7 +9,7 @@
 #   no-new-privileges      setuid binaries cannot escalate
 #   --user 10001           unprivileged user, no host UID mapping
 #   --pids-limit/--memory  bounded resource use
-#   -v ...:ro              candidate source mounted read-only; no other host paths
+#   --mount ...,readonly   candidate source mounted read-only; no other host paths
 set -euo pipefail
 
 PKG="${1:?usage: run_sandbox.sh <package-dir>}"
@@ -28,5 +28,5 @@ exec docker run --rm \
   --cpus 1 \
   --user 10001:10001 \
   -e PIP_NO_CACHE_DIR=1 \
-  -v "$PKG_ABS":/input:ro \
+  --mount "type=bind,source=$PKG_ABS,target=/input,readonly" \
   "$IMAGE" /input

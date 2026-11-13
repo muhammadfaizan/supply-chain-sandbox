@@ -1,27 +1,34 @@
 # Scanner toolbox: OSV-Scanner (known vulnerabilities) and GuardDog (malicious-package
 # heuristics) in one image, so nothing has to be installed on the host.
 #
-# Used automatically when a tool is not installed locally, or on purpose with
-# `--in-docker`. The candidate folder is mounted read-only; these tools only read it.
+# Used by default whenever Docker is running (see scripts/screening/runner.py).
+# The candidate folder is mounted read-only. GuardDog runs with no network;
+# OSV-Scanner needs the network to download its vulnerability database.
 FROM python:3.13-slim-bookworm
 
 ARG OSV_VERSION=2.7.1
 ARG GUARDDOG_VERSION=3.2.0
 
-# OSV-Scanner: download the release binary and verify its published SHA-256 checksum.
-# The architecture comes from dpkg (amd64 or arm64), so this works with any builder.
+# OSV-Scanner: download the release binary and check it against a SHA-256 value
+# pinned in this file. The checksum is not read from the release page, so a
+# compromised release cannot change both the binary and the expected checksum.
+# To upgrade, change OSV_VERSION and both OSV_SHA256_* values together.
+ARG OSV_SHA256_AMD64=fb7dab19a8bd9bbe5c3189f09d4b7ee1820c9553a23bac202648a56efd2f6ee8
+ARG OSV_SHA256_ARM64=983d22fbad9724514e3fcc6acc83b5fa64c5ffa6b0d9f510028f22c1b223ff81
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends ca-certificates curl; \
     rm -rf /var/lib/apt/lists/*; \
     arch="$(dpkg --print-architecture)"; \
-    base="https://github.com/google/osv-scanner/releases/download/v${OSV_VERSION}"; \
-    curl -fsSL -o /tmp/osv "${base}/osv-scanner_linux_${arch}"; \
-    curl -fsSL -o /tmp/SUMS "${base}/osv-scanner_SHA256SUMS"; \
-    expected="$(grep "osv-scanner_linux_${arch}\$" /tmp/SUMS | cut -d' ' -f1)"; \
+    case "$arch" in \
+      amd64) expected="${OSV_SHA256_AMD64}" ;; \
+      arm64) expected="${OSV_SHA256_ARM64}" ;; \
+      *) echo "no pinned OSV-Scanner checksum for ${arch}" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL -o /tmp/osv "https://github.com/google/osv-scanner/releases/download/v${OSV_VERSION}/osv-scanner_linux_${arch}"; \
     echo "${expected}  /tmp/osv" | sha256sum -c -; \
     install -m 0755 /tmp/osv /usr/local/bin/osv-scanner; \
-    rm -f /tmp/osv /tmp/SUMS; \
+    rm -f /tmp/osv; \
     apt-get purge -y curl && apt-get autoremove -y
 
 # GuardDog: pinned PyPI release.
