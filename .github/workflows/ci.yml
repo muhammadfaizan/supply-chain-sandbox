@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  checks:
+    name: Syntax checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile Python
+        run: python3 -m py_compile scripts/*.py monitor/*.py tests/*.py
+      - name: Check shell scripts
+        run: bash -n scripts/run_sandbox.sh scripts/sandbox-install.sh docs/demo.sh
+
+  test:
+    name: Test suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run tests (builds the images first)
+        run: python3 scripts/sandbox.py test
+
+  self-scan:
+    name: Screen the tool's own examples
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Built-in examples behave as expected (clean passes, malicious is blocked)
+        run: python3 scripts/sandbox.py scan
+      - name: Screen the multi-ecosystem fixture with this action
+        uses: ./
+        with:
+          path: fixtures/multi-ecosystem
